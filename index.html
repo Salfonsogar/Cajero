@@ -325,22 +325,6 @@
   // Misma lógica que el programa original en C# (Program.cs)
   // ---------------------------------------------------------------
 
-  function calcularCiclos(restante, cantidad) {
-    if (restante <= 0) return restante;
-
-    const full = 600;
-    const unidades = [1, 2, 3, 4];
-    const ciclos = Math.floor(restante / full);
-
-    if (ciclos === 0) return restante;
-
-    for (let i = 0; i < cantidad.length; i++) {
-      cantidad[i] += ciclos * unidades[i];
-    }
-
-    return restante - ciclos * full;
-  }
-
   function calcularRetiro(monto) {
     const denominaciones = [10, 20, 50, 100];
     const cantidad = [0, 0, 0, 0];
@@ -348,7 +332,6 @@
     if (monto <= 0 || monto % denominaciones[0] !== 0) return cantidad;
 
     let restante = monto;
-    restante = calcularCiclos(restante, cantidad);
 
     while (restante > 0) {
       const antes = restante;
