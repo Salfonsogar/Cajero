@@ -1,40 +1,17 @@
 <!DOCTYPE html>
 <html lang="es">
-
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cajero</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link
-    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Manrope:wght@400;500;600;700;800&display=swap"
-    rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
-</head>
-
-
-<body>
-
-  <div class="rig">
-    <div class="brand"> <span>Cajero Automático</span></div>
-    <div class="machine">
-      <div class="cam"></div>
-      <div class="screen-frame">
-        <div class="screen" id="screen"></div>
-      </div>
-
-      <div class="controls" id="controls"></div>
-
-      <div class="slot">
-        <div class="slot-label">Bandeja de billetes</div>
-        <div class="bills" id="bills">
-          <div class="empty-note">— sin retiro aún —</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <script src="script.js"></script>
-</body>
-
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <title>Cajero</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
 </html>
