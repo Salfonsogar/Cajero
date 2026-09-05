@@ -34,20 +34,26 @@
   </div>
 
   <script>
-    const DENOMINACIONES = [10000, 20000, 50000, 100000];
+    const DENOMINACIONES = [
+      { valor: 10000, nombre: '$10.000', clase: 'd10000' },
+      { valor: 20000, nombre: '$20.000', clase: 'd20000' },
+      { valor: 50000, nombre: '$50.000', clase: 'd50000' },
+      { valor: 100000, nombre: '$100.000', clase: 'd100000' }
+    ];
+    const VALORES = DENOMINACIONES.map(d => d.valor);
 
     function calcularRetiroCarreo(monto) {
-      const cantidad = [0, 0, 0, 0];
-      if (monto <= 0 || monto % DENOMINACIONES[0] !== 0) return cantidad;
+      const cantidad = VALORES.map(() => 0);
+      if (monto <= 0 || monto % VALORES[0] !== 0) return cantidad;
 
       let restante = monto;
 
       while (restante > 0) {
         const antes = restante;
-        for (let skip = 0; skip < DENOMINACIONES.length && restante > 0; skip++) {
-          for (let j = skip; j < DENOMINACIONES.length && restante >= DENOMINACIONES[j]; j++) {
+        for (let skip = 0; skip < VALORES.length && restante > 0; skip++) {
+          for (let j = skip; j < VALORES.length && restante >= VALORES[j]; j++) {
             cantidad[j]++;
-            restante -= DENOMINACIONES[j];
+            restante -= VALORES[j];
           }
         }
         if (restante === antes) break;
@@ -56,36 +62,15 @@
     }
 
     function esMontoValido(monto) {
-      return Number.isInteger(monto) && monto > 0 && monto % DENOMINACIONES[0] === 0;
+      return Number.isInteger(monto) && monto > 0 && monto % VALORES[0] === 0;
     }
 
     function formatCOP(n) {
       return '$' + n.toLocaleString('es-CO');
     }
 
-    const state = {
-      step: 'account-type',
-      accountType: null,
-      accountNumber: '',
-      pin: '',
-      nequiCode: null,
-      nequiTimer: null,
-      nequiSecondsLeft: 60,
-      monto: null,
-      errorMsg: ''
-    };
-
-    const NOMBRES = ['$10.000', '$20.000', '$50.000', '$100.000'];
-    const CLASES = ['d10000', 'd20000', 'd50000', 'd100000'];
-    const MONTOS_FIJOS = [20000, 50000, 100000, 200000, 300000, 500000];
-
-    const screenEl = document.getElementById('screen');
-    const controlsEl = document.getElementById('controls');
-    const billsEl = document.getElementById('bills');
-
-    function resetAll() {
-      if (state.nequiTimer) clearInterval(state.nequiTimer);
-      Object.assign(state, {
+    function estadoInicial() {
+      return {
         step: 'account-type',
         accountType: null,
         accountNumber: '',
@@ -95,7 +80,20 @@
         nequiSecondsLeft: 60,
         monto: null,
         errorMsg: ''
-      });
+      };
+    }
+
+    const state = estadoInicial();
+
+    const MONTOS_FIJOS = [20000, 50000, 100000, 200000, 300000, 500000];
+
+    const screenEl = document.getElementById('screen');
+    const controlsEl = document.getElementById('controls');
+    const billsEl = document.getElementById('bills');
+
+    function resetAll() {
+      if (state.nequiTimer) clearInterval(state.nequiTimer);
+      Object.assign(state, estadoInicial());
       billsEl.innerHTML = '<div class="empty-note">— sin retiro aún —</div>';
       render();
     }
@@ -116,61 +114,67 @@
       if (state.step === 'error') return renderErrorScreen();
     }
 
-    function wireOption(el, onActivate) {
-      el.addEventListener('click', onActivate);
-      el.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onActivate();
-        }
-      });
+    function renderMenu(containerId, options, onSelect) {
+      const html = `
+        <div class="screen-menu" id="${containerId}">
+          ${options.map((opt, i) => `
+            <div class="screen-option" data-idx="${i}" tabindex="0" role="button">
+              <span class="key">${i + 1}</span>
+              <span class="opt-text"><span class="opt-title">${opt.title}</span></span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+      const wire = () => {
+        document.getElementById(containerId).querySelectorAll('.screen-option').forEach(el => {
+          const activar = () => onSelect(options[Number(el.dataset.idx)].value, el);
+          el.addEventListener('click', activar);
+          el.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activar(); }
+          });
+        });
+      };
+      return { html, wire };
     }
 
-    const ACCOUNT_OPTIONS = [
-      { type: 'nequi', title: 'NEQUI' },
-      { type: 'mano', title: 'Ahorro a la mano' },
-      { type: 'ahorros', title: 'Cuenta de ahorros' }
-    ];
+    let opcionesActuales = [];
+    let menuActualId = null;
 
     function renderAccountType() {
-      screenEl.innerHTML = `
-      <div class="prompt-line"><span class="caret">&gt;</span><span>Bienvenido al Cajero Automático</span></div>
-      <div class="prompt-line"><span class="caret">&gt;</span><span>Seleccione el tipo de cuenta:</span></div>
-      <div class="screen-menu" id="acctMenu">
-        ${ACCOUNT_OPTIONS.map((opt, i) => `
-          <div class="screen-option" data-type="${opt.type}" tabindex="0" role="button">
-            <span class="key">${i + 1}</span>
-            <span class="opt-text">
-              <span class="opt-title">${opt.title}</span>
-            </span>
-          </div>
-        `).join('')}
-      </div>
-      <div class="field-hint">Toque una opción o presione 1, 2 o 3.</div>
-    `;
-      controlsEl.innerHTML = '';
+      const opciones = [
+        { title: 'NEQUI', value: 'nequi' },
+        { title: 'Ahorro a la mano', value: 'mano' },
+        { title: 'Cuenta de ahorros', value: 'ahorros' }
+      ];
+      opcionesActuales = opciones;
+      menuActualId = 'acctMenu';
 
-      document.querySelectorAll('#acctMenu .screen-option').forEach(el => {
-        wireOption(el, () => selectAccountType(el.dataset.type));
+      const menu = renderMenu('acctMenu', opciones, (tipo) => {
+        state.accountType = tipo;
+        state.step = 'account-number';
+        render();
       });
+
+      screenEl.innerHTML = `
+        <div class="prompt-line"><span class="caret">&gt;</span><span>Bienvenido al Cajero Automático</span></div>
+        <div class="prompt-line"><span class="caret">&gt;</span><span>Seleccione el tipo de cuenta:</span></div>
+        ${menu.html}
+        <div class="field-hint">Toque una opción o presione 1, 2 o 3.</div>
+      `;
+      controlsEl.innerHTML = '';
+      menu.wire();
     }
 
-    function selectAccountType(type) {
-      state.accountType = type;
-      state.step = 'account-number';
-      render();
-    }
+    const LARGO_CUENTA = { nequi: 10, mano: 11, ahorros: 11 };
 
     function renderAccountNumber() {
-      const cfg = {
-        nequi: { title: `Ingrese el número de cuenta (${10} dígitos)`, maxlen: 10 },
-        mano: { title: `Ingrese el número de cuenta (${11} dígitos)`, maxlen: 11 },
-        ahorros: { title: `Ingrese el número de cuenta (${11} dígitos)`, maxlen: 11 }
-      }[state.accountType];
+      const maxlen = LARGO_CUENTA[state.accountType];
+      menuActualId = null;
+      opcionesActuales = [];
 
       screenEl.innerHTML = `
-      <div class="prompt-line"><span class="caret">&gt;</span><span>${cfg.title}</span></div>
-      <input class="field-input" id="acctInput" type="text" inputmode="numeric" maxlength="${cfg.maxlen}" placeholder="${'0'.repeat(cfg.maxlen)}" value="${state.accountNumber}">
+      <div class="prompt-line"><span class="caret">&gt;</span><span>Ingrese el número de cuenta (${maxlen} dígitos)</span></div>
+      <input class="field-input" id="acctInput" type="text" inputmode="numeric" maxlength="${maxlen}" placeholder="${'0'.repeat(maxlen)}" value="${state.accountNumber}">
       <div id="acctFeedback"></div>
     `;
 
@@ -184,13 +188,11 @@
       const nextBtn = document.getElementById('nextBtn');
 
       input.addEventListener('input', () => {
-        input.value = input.value.replace(/[^0-9]/g, '').slice(0, cfg.maxlen);
+        input.value = input.value.replace(/[^0-9]/g, '').slice(0, maxlen);
         const valido = validarCuenta(state.accountType, input.value);
-        if (input.value.length === cfg.maxlen && !valido) {
-          feedback.innerHTML = `<div class="prompt-line"><span class="caret error">!</span><span class="error">Número inválido para este tipo de cuenta</span></div>`;
-        } else {
-          feedback.innerHTML = '';
-        }
+        feedback.innerHTML = (input.value.length === maxlen && !valido)
+          ? `<div class="prompt-line"><span class="caret error">!</span><span class="error">Número inválido para este tipo de cuenta</span></div>`
+          : '';
         nextBtn.disabled = !valido;
       });
 
@@ -208,14 +210,20 @@
       input.focus();
     }
 
+    const VALIDACIONES_CUENTA = {
+      nequi: /^[0-9]{10}$/,
+      mano: /^[01]3[0-9]{9}$/,
+      ahorros: /^[0-9]{11}$/
+    };
+
     function validarCuenta(tipo, num) {
-      if (tipo === 'nequi') return /^[0-9]{10}$/.test(num);
-      if (tipo === 'mano') return /^[01]3[0-9]{9}$/.test(num);
-      if (tipo === 'ahorros') return /^[0-9]{11}$/.test(num);
-      return false;
+      const regex = VALIDACIONES_CUENTA[tipo];
+      return regex ? regex.test(num) : false;
     }
 
     function renderAuth() {
+      menuActualId = null;
+      opcionesActuales = [];
       if (state.accountType === 'nequi') return renderAuthNequi();
       return renderAuthPin();
     }
@@ -243,26 +251,22 @@
     `;
 
       function paintCode() {
-        document.getElementById('codeBox').innerHTML =
-          state.nequiCode.split('').map(d => `<div class="code-digit">${d}</div>`).join('');
-        document.getElementById('secLabel').textContent = `expira en ${state.nequiSecondsLeft}s`;
-        document.getElementById('timerFill').style.width = (state.nequiSecondsLeft / 60 * 100) + '%';
+        const codeBox = document.getElementById('codeBox');
+        const secLabel = document.getElementById('secLabel');
+        const timerFill = document.getElementById('timerFill');
+        if (!codeBox || !secLabel || !timerFill) return false;
+        codeBox.innerHTML = state.nequiCode.split('').map(d => `<div class="code-digit">${d}</div>`).join('');
+        secLabel.textContent = `expira en ${state.nequiSecondsLeft}s`;
+        timerFill.style.width = (state.nequiSecondsLeft / 60 * 100) + '%';
+        return true;
       }
       paintCode();
 
       if (state.nequiTimer) clearInterval(state.nequiTimer);
       state.nequiTimer = setInterval(() => {
         state.nequiSecondsLeft--;
-        if (state.nequiSecondsLeft <= 0) {
-          nuevoCodigo();
-        }
-        const secLabel = document.getElementById('secLabel');
-        const timerFill = document.getElementById('timerFill');
-        const codeBox = document.getElementById('codeBox');
-        if (!secLabel || !timerFill || !codeBox) { clearInterval(state.nequiTimer); return; }
-        codeBox.innerHTML = state.nequiCode.split('').map(d => `<div class="code-digit">${d}</div>`).join('');
-        secLabel.textContent = `expira en ${state.nequiSecondsLeft}s`;
-        timerFill.style.width = (state.nequiSecondsLeft / 60 * 100) + '%';
+        if (state.nequiSecondsLeft <= 0) nuevoCodigo();
+        if (!paintCode()) clearInterval(state.nequiTimer); // ya se cambió de paso
       }, 1000);
 
       document.getElementById('backBtn').addEventListener('click', () => {
@@ -286,7 +290,6 @@
       <div class="prompt-line"><span class="caret">&gt;</span><span>Ingrese su clave de 4 dígitos</span></div>
       <input class="field-input pin" id="pinInput" type="password" inputmode="numeric" maxlength="4" placeholder="••••">
       <div class="field-hint">La clave no se muestra en pantalla.</div>
-      <div id="pinFeedback"></div>
     `;
       controlsEl.innerHTML = `
       <button class="btn btn-ghost" id="backBtn">← Volver</button>
@@ -315,28 +318,40 @@
       input.focus();
     }
 
-    let montoSeleccionado = null;
-    let usandoOtro = false;
-
     function renderAmount() {
-      montoSeleccionado = null;
-      usandoOtro = false;
+      let monto = null;
+
+      const opciones = MONTOS_FIJOS.map(m => ({ title: formatCOP(m), value: m }));
+      opciones.push({ title: 'Otro valor', value: 'otro' });
+      opcionesActuales = opciones;
+      menuActualId = 'amountMenu';
+
+      const menu = renderMenu('amountMenu', opciones, (valor, el) => {
+        document.querySelectorAll('#amountMenu .screen-option').forEach(o => o.classList.remove('selected'));
+        el.classList.add('selected');
+
+        const otroWrap = document.getElementById('otroWrap');
+        const otroInput = document.getElementById('otroInput');
+        const retirarBtn = document.getElementById('retirarBtn');
+
+        if (valor === 'otro') {
+          monto = null;
+          otroWrap.style.display = 'block';
+          retirarBtn.disabled = true;
+          otroInput.value = '';
+          otroInput.focus();
+        } else {
+          monto = valor;
+          otroWrap.style.display = 'none';
+          retirarBtn.disabled = false;
+        }
+        document.getElementById('amountFeedback').innerHTML = '';
+      });
 
       screenEl.innerHTML = `
       <div class="prompt-line"><span class="caret">&gt;</span><span>Seleccione el valor a retirar:</span></div>
       <div class="field-hint">No se dispensan billetes de $5.000. Solo múltiplos de $10.000.</div>
-      <div class="screen-menu" id="amountMenu">
-        ${MONTOS_FIJOS.map((m, i) => `
-          <div class="screen-option" data-monto="${m}" tabindex="0" role="button">
-            <span class="key">${i + 1}</span>
-            <span class="opt-text"><span class="opt-title">${formatCOP(m)}</span></span>
-          </div>
-        `).join('')}
-        <div class="screen-option" data-otro="1" tabindex="0" role="button">
-          <span class="key">${MONTOS_FIJOS.length + 1}</span>
-          <span class="opt-text"><span class="opt-title">Otro valor</span></span>
-        </div>
-      </div>
+      ${menu.html}
       <div id="otroWrap" style="display:none; margin-top:8px;">
         <div class="prompt-line"><span class="caret">$</span>
           <input class="field-input" id="otroInput" type="text" inputmode="numeric" placeholder="Ingrese un valor">
@@ -350,42 +365,16 @@
       <button class="btn btn-primary" id="retirarBtn" disabled>Retirar</button>
     `;
 
-      const menu = document.getElementById('amountMenu');
-      const otroWrap = document.getElementById('otroWrap');
+      menu.wire();
+
       const otroInput = document.getElementById('otroInput');
-      const feedback = document.getElementById('amountFeedback');
       const retirarBtn = document.getElementById('retirarBtn');
-
-      function marcarSeleccion(el) {
-        menu.querySelectorAll('.screen-option').forEach(o => o.classList.remove('selected'));
-        el.classList.add('selected');
-      }
-
-      menu.querySelectorAll('[data-monto]').forEach(el => {
-        wireOption(el, () => {
-          montoSeleccionado = parseInt(el.dataset.monto, 10);
-          usandoOtro = false;
-          otroWrap.style.display = 'none';
-          otroInput.value = '';
-          feedback.innerHTML = '';
-          marcarSeleccion(el);
-          retirarBtn.disabled = false;
-        });
-      });
-
-      const otroEl = menu.querySelector('[data-otro]');
-      wireOption(otroEl, () => {
-        montoSeleccionado = null;
-        usandoOtro = true;
-        marcarSeleccion(otroEl);
-        otroWrap.style.display = 'block';
-        retirarBtn.disabled = true;
-        otroInput.focus();
-      });
+      const feedback = document.getElementById('amountFeedback');
 
       otroInput.addEventListener('input', () => {
         otroInput.value = otroInput.value.replace(/[^0-9]/g, '');
-        retirarBtn.disabled = otroInput.value.length === 0;
+        monto = otroInput.value ? parseInt(otroInput.value, 10) : null;
+        retirarBtn.disabled = !monto;
       });
 
       document.getElementById('backBtn').addEventListener('click', () => {
@@ -394,30 +383,24 @@
       });
 
       retirarBtn.addEventListener('click', () => {
-        const monto = usandoOtro ? parseInt(otroInput.value || '0', 10) : montoSeleccionado;
-
         if (!monto || monto <= 0) {
           feedback.innerHTML = `<div class="prompt-line"><span class="caret error">!</span><span class="error">Seleccione o ingrese un valor</span></div>`;
           return;
         }
-
         if (!esMontoValido(monto)) {
           goError(`No es posible entregar ${formatCOP(monto)} con las denominaciones disponibles ($10.000, $20.000, $50.000, $100.000).`);
           return;
         }
-
         state.monto = monto;
         state.step = 'result';
         render();
       });
     }
 
-    function renderResult() {
-      const cantidad = calcularRetiroCarreo(state.monto);
-
-      const rows = NOMBRES.map((n, i) => `
-      <div class="breakdown-row"><span>Billetes de ${n}</span><span class="dots"></span><span>${cantidad[i]}</span></div>
-    `).join('');
+    function construirReporteHTML(cantidad) {
+      const rows = DENOMINACIONES.map((d, i) => `
+        <div class="breakdown-row"><span>Billetes de ${d.nombre}</span><span class="dots"></span><span>${cantidad[i]}</span></div>
+      `).join('');
 
       const NOMBRE_TIPO = {
         nequi: 'NEQUI',
@@ -429,53 +412,48 @@
         ? '0' + state.accountNumber
         : state.accountNumber;
 
-      const reporteCuenta = `
-        <div class="prompt-line"><span class="caret">&gt;</span><span>Tipo de cuenta: ${NOMBRE_TIPO}</span></div>
-        <div class="prompt-line"><span class="caret muted">·</span><span class="muted">Número de cuenta: ${numeroReportado}</span></div>
-      `;
-
       const N = 1000;
       const valorMenor = state.monto - 10000;
       const proyeccion = valorMenor * N;
 
-      screenEl.innerHTML = `
-      ${reporteCuenta}
-      <div class="breakdown">
-        <div class="prompt-line"><span class="caret">&gt;</span><span>Desglose para ${formatCOP(state.monto)}:</span></div>
-        ${rows}
-        <div class="total-row"><span>Total entregado</span><span>${formatCOP(state.monto)}</span></div>
-      </div>
-      <div class="predict-box">
-        <div>Predicción:</div>
-        <div>Valor de referencia: <b>${formatCOP(valorMenor)}</b></div>
-        <div>Proyección estimada: <b>${formatCOP(proyeccion)}</b></div>
-      </div>
-    `;
+      return `
+        <div class="prompt-line"><span class="caret">&gt;</span><span>Tipo de cuenta: ${NOMBRE_TIPO}</span></div>
+        <div class="prompt-line"><span class="caret muted">·</span><span class="muted">Número de cuenta: ${numeroReportado}</span></div>
+        <div class="breakdown">
+          <div class="prompt-line"><span class="caret">&gt;</span><span>Desglose para ${formatCOP(state.monto)}:</span></div>
+          ${rows}
+          <div class="total-row"><span>Total entregado</span><span>${formatCOP(state.monto)}</span></div>
+        </div>
+        <div class="predict-box">
+          <div>Predicción:</div>
+          <div>Valor de referencia: <b>${formatCOP(valorMenor)}</b></div>
+          <div>Proyección estimada: <b>${formatCOP(proyeccion)}</b></div>
+        </div>
+      `;
+    }
 
-      controlsEl.innerHTML = `
-      <button class="btn btn-primary" id="nuevoBtn">Nuevo retiro</button>
-    `;
-      document.getElementById('nuevoBtn').addEventListener('click', resetAll);
-
+    function pintarBandejaBilletes(cantidad) {
       billsEl.innerHTML = '';
       const totalBills = cantidad.reduce((a, b) => a + b, 0);
       if (totalBills === 0) {
         billsEl.innerHTML = '<div class="empty-note">— no hay billetes para este monto —</div>';
         return;
       }
+
       const MAX_VISUAL = 60;
       let shown = 0, delay = 0;
-      for (let i = 0; i < cantidad.length; i++) {
+      for (let i = 0; i < cantidad.length && shown < MAX_VISUAL; i++) {
         for (let k = 0; k < cantidad[i] && shown < MAX_VISUAL; k++) {
           const bill = document.createElement('div');
-          bill.className = `bill ${CLASES[i]}`;
+          bill.className = `bill ${DENOMINACIONES[i].clase}`;
           bill.style.animationDelay = `${delay}ms`;
-          bill.textContent = NOMBRES[i];
+          bill.textContent = DENOMINACIONES[i].nombre;
           billsEl.appendChild(bill);
           shown++;
           delay += 16;
         }
       }
+
       if (totalBills > MAX_VISUAL) {
         const note = document.createElement('div');
         note.className = 'empty-note';
@@ -484,7 +462,24 @@
       }
     }
 
+    function renderResult() {
+      menuActualId = null;
+      opcionesActuales = [];
+
+      const cantidad = calcularRetiroCarreo(state.monto);
+
+      screenEl.innerHTML = construirReporteHTML(cantidad);
+
+      controlsEl.innerHTML = `<button class="btn btn-primary" id="nuevoBtn">Nuevo retiro</button>`;
+      document.getElementById('nuevoBtn').addEventListener('click', resetAll);
+
+      pintarBandejaBilletes(cantidad);
+    }
+
     function renderErrorScreen() {
+      menuActualId = null;
+      opcionesActuales = [];
+
       screenEl.innerHTML = `
       <div class="prompt-line"><span class="caret error">!</span><span class="error">Operación no disponible</span></div>
       <div class="prompt-line"><span class="muted">${state.errorMsg}</span></div>
@@ -497,20 +492,17 @@
 
     document.addEventListener('keydown', (e) => {
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+      if (!menuActualId || opcionesActuales.length === 0) return;
 
-      if (state.step === 'account-type') {
-        const opt = ACCOUNT_OPTIONS[parseInt(e.key, 10) - 1];
-        if (opt) selectAccountType(opt.type);
-      } else if (state.step === 'amount') {
-        const idx = parseInt(e.key, 10) - 1;
-        const el = document.querySelectorAll('#amountMenu .screen-option')[idx];
-        if (el) el.click();
-      }
+      const idx = parseInt(e.key, 10) - 1;
+      if (idx < 0 || idx >= opcionesActuales.length) return;
+
+      const el = document.querySelector(`#${menuActualId} [data-idx="${idx}"]`);
+      if (el) el.click();
     });
 
     render();
   </script>
-
 </body>
 
 </html>
