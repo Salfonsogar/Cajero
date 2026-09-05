@@ -116,35 +116,61 @@
       if (state.step === 'error') return renderErrorScreen();
     }
 
+    function wireOption(el, onActivate) {
+      el.addEventListener('click', onActivate);
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onActivate();
+        }
+      });
+    }
+
+    const ACCOUNT_OPTIONS = [
+      { type: 'nequi', title: 'NEQUI' },
+      { type: 'mano', title: 'Ahorro a la mano' },
+      { type: 'ahorros', title: 'Cuenta de ahorros' }
+    ];
+
     function renderAccountType() {
       screenEl.innerHTML = `
       <div class="prompt-line"><span class="caret">&gt;</span><span>Bienvenido al Cajero Automático</span></div>
-      <div class="prompt-line"><span class="caret">&gt;</span><span>Seleccione el tipo de cuenta para el retiro</span></div>
+      <div class="prompt-line"><span class="caret">&gt;</span><span>Seleccione el tipo de cuenta:</span></div>
+      <div class="screen-menu" id="acctMenu">
+        ${ACCOUNT_OPTIONS.map((opt, i) => `
+          <div class="screen-option" data-type="${opt.type}" tabindex="0" role="button">
+            <span class="key">${i + 1}</span>
+            <span class="opt-text">
+              <span class="opt-title">${opt.title}</span>
+            </span>
+          </div>
+        `).join('')}
+      </div>
+      <div class="field-hint">Toque una opción o presione 1, 2 o 3.</div>
     `;
-      controlsEl.innerHTML = `
-      <button class="btn btn-account" data-type="nequi">NEQUI</button>
-      <button class="btn btn-account" data-type="mano">Ahorro a la mano</button>
-      <button class="btn btn-account" data-type="ahorros">Cuenta de ahorros</button>
-    `;
-      controlsEl.querySelectorAll('[data-type]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          state.accountType = btn.dataset.type;
-          state.step = 'account-number';
-          render();
-        });
+      controlsEl.innerHTML = '';
+
+      document.querySelectorAll('#acctMenu .screen-option').forEach(el => {
+        wireOption(el, () => selectAccountType(el.dataset.type));
       });
     }
+
+    function selectAccountType(type) {
+      state.accountType = type;
+      state.step = 'account-number';
+      render();
+    }
+
     function renderAccountNumber() {
       const cfg = {
-        nequi: { title: 'Ingrese el número de celular', maxlen: 10, hint: 'Solo números, sin letras ni caracteres especiales.' },
-        mano: { title: 'Ingrese el número de cuenta', maxlen: 11, hint: 'Debe iniciar en 0 o 1, y el segundo dígito debe ser 3. Ej: 03XXXXXXXXX' },
-        ahorros: { title: 'Ingrese el número de cuenta de ahorros', maxlen: 11, hint: 'Solo números del 0 al 9, sin letras ni caracteres especiales.' }
+        nequi: { title: `Ingrese el número de cuenta (${10} dígitos)`, maxlen: 10 },
+        mano: { title: `Ingrese el número de cuenta (${11} dígitos)`, maxlen: 11 },
+        ahorros: { title: `Ingrese el número de cuenta (${11} dígitos)`, maxlen: 11 }
       }[state.accountType];
 
       screenEl.innerHTML = `
       <div class="prompt-line"><span class="caret">&gt;</span><span>${cfg.title}</span></div>
       <input class="field-input" id="acctInput" type="text" inputmode="numeric" maxlength="${cfg.maxlen}" placeholder="${'0'.repeat(cfg.maxlen)}" value="${state.accountNumber}">
-      <div class="field-hint">${cfg.hint}</div>
       <div id="acctFeedback"></div>
     `;
 
@@ -289,48 +315,77 @@
       input.focus();
     }
 
+    let montoSeleccionado = null;
+    let usandoOtro = false;
+
     function renderAmount() {
+      montoSeleccionado = null;
+      usandoOtro = false;
+
       screenEl.innerHTML = `
-      <div class="prompt-line"><span class="caret">&gt;</span><span>Seleccione el valor a retirar</span></div>
-      <div class="field-hint">No se dispensan billetes de $5.000. Solo valores múltiplos de $10.000.</div>
-      <div id="otroWrap" style="display:none; margin-top:6px;">
-        <input class="field-input" id="otroInput" type="text" inputmode="numeric" placeholder="Ingrese un valor">
+      <div class="prompt-line"><span class="caret">&gt;</span><span>Seleccione el valor a retirar:</span></div>
+      <div class="field-hint">No se dispensan billetes de $5.000. Solo múltiplos de $10.000.</div>
+      <div class="screen-menu" id="amountMenu">
+        ${MONTOS_FIJOS.map((m, i) => `
+          <div class="screen-option" data-monto="${m}" tabindex="0" role="button">
+            <span class="key">${i + 1}</span>
+            <span class="opt-text"><span class="opt-title">${formatCOP(m)}</span></span>
+          </div>
+        `).join('')}
+        <div class="screen-option" data-otro="1" tabindex="0" role="button">
+          <span class="key">${MONTOS_FIJOS.length + 1}</span>
+          <span class="opt-text"><span class="opt-title">Otro valor</span></span>
+        </div>
+      </div>
+      <div id="otroWrap" style="display:none; margin-top:8px;">
+        <div class="prompt-line"><span class="caret">$</span>
+          <input class="field-input" id="otroInput" type="text" inputmode="numeric" placeholder="Ingrese un valor">
+        </div>
       </div>
       <div id="amountFeedback"></div>
     `;
 
       controlsEl.innerHTML = `
-      ${MONTOS_FIJOS.map(m => `<button class="btn btn-amount" data-monto="${m}">${formatCOP(m)}</button>`).join('')}
-      <button class="btn btn-amount" id="otroBtn">Otro</button>
       <button class="btn btn-ghost" id="backBtn">← Volver</button>
-      <button class="btn btn-primary" id="retirarBtn">Retirar</button>
+      <button class="btn btn-primary" id="retirarBtn" disabled>Retirar</button>
     `;
 
-      let seleccionFija = null;
+      const menu = document.getElementById('amountMenu');
       const otroWrap = document.getElementById('otroWrap');
       const otroInput = document.getElementById('otroInput');
       const feedback = document.getElementById('amountFeedback');
+      const retirarBtn = document.getElementById('retirarBtn');
 
-      controlsEl.querySelectorAll('[data-monto]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          seleccionFija = parseInt(btn.dataset.monto, 10);
-          otroInput.value = '';
+      function marcarSeleccion(el) {
+        menu.querySelectorAll('.screen-option').forEach(o => o.classList.remove('selected'));
+        el.classList.add('selected');
+      }
+
+      menu.querySelectorAll('[data-monto]').forEach(el => {
+        wireOption(el, () => {
+          montoSeleccionado = parseInt(el.dataset.monto, 10);
+          usandoOtro = false;
           otroWrap.style.display = 'none';
-          controlsEl.querySelectorAll('[data-monto]').forEach(b => b.classList.remove('selected'));
-          btn.classList.add('selected');
+          otroInput.value = '';
           feedback.innerHTML = '';
+          marcarSeleccion(el);
+          retirarBtn.disabled = false;
         });
       });
 
-      document.getElementById('otroBtn').addEventListener('click', () => {
-        seleccionFija = null;
-        controlsEl.querySelectorAll('[data-monto]').forEach(b => b.classList.remove('selected'));
+      const otroEl = menu.querySelector('[data-otro]');
+      wireOption(otroEl, () => {
+        montoSeleccionado = null;
+        usandoOtro = true;
+        marcarSeleccion(otroEl);
         otroWrap.style.display = 'block';
+        retirarBtn.disabled = true;
         otroInput.focus();
       });
 
       otroInput.addEventListener('input', () => {
         otroInput.value = otroInput.value.replace(/[^0-9]/g, '');
+        retirarBtn.disabled = otroInput.value.length === 0;
       });
 
       document.getElementById('backBtn').addEventListener('click', () => {
@@ -338,8 +393,8 @@
         render();
       });
 
-      document.getElementById('retirarBtn').addEventListener('click', () => {
-        const monto = seleccionFija !== null ? seleccionFija : parseInt(otroInput.value || '0', 10);
+      retirarBtn.addEventListener('click', () => {
+        const monto = usandoOtro ? parseInt(otroInput.value || '0', 10) : montoSeleccionado;
 
         if (!monto || monto <= 0) {
           feedback.innerHTML = `<div class="prompt-line"><span class="caret error">!</span><span class="error">Seleccione o ingrese un valor</span></div>`;
@@ -364,24 +419,20 @@
       <div class="breakdown-row"><span>Billetes de ${n}</span><span class="dots"></span><span>${cantidad[i]}</span></div>
     `).join('');
 
-      let reporteCuenta = '';
-      if (state.accountType === 'nequi') {
-        const vector11 = '0' + state.accountNumber;
-        reporteCuenta = `
-        <div class="prompt-line"><span class="caret">&gt;</span><span>Cuenta: NEQUI</span></div>
-        <div class="prompt-line"><span class="caret muted">·</span><span class="muted">Vector reportado (11 dígitos): ${vector11}</span></div>
+      const NOMBRE_TIPO = {
+        nequi: 'NEQUI',
+        mano: 'Ahorro a la mano',
+        ahorros: 'Cuenta de ahorros'
+      }[state.accountType];
+
+      const numeroReportado = state.accountType === 'nequi'
+        ? '0' + state.accountNumber
+        : state.accountNumber;
+
+      const reporteCuenta = `
+        <div class="prompt-line"><span class="caret">&gt;</span><span>Tipo de cuenta: ${NOMBRE_TIPO}</span></div>
+        <div class="prompt-line"><span class="caret muted">·</span><span class="muted">Número de cuenta: ${numeroReportado}</span></div>
       `;
-      } else if (state.accountType === 'mano') {
-        reporteCuenta = `
-        <div class="prompt-line"><span class="caret">&gt;</span><span>Cuenta: Ahorro a la mano</span></div>
-        <div class="prompt-line"><span class="caret muted">·</span><span class="muted">Cuenta: ${state.accountNumber}</span></div>
-      `;
-      } else {
-        reporteCuenta = `
-        <div class="prompt-line"><span class="caret">&gt;</span><span>Cuenta: Ahorro</span></div>
-        <div class="prompt-line"><span class="caret muted">·</span><span class="muted">Cuenta: ${state.accountNumber}</span></div>
-      `;
-      }
 
       const N = 1000;
       const valorMenor = state.monto - 10000;
@@ -443,6 +494,19 @@
       document.getElementById('restartBtn').addEventListener('click', resetAll);
       billsEl.innerHTML = '<div class="empty-note">— sin retiro aún —</div>';
     }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+
+      if (state.step === 'account-type') {
+        const opt = ACCOUNT_OPTIONS[parseInt(e.key, 10) - 1];
+        if (opt) selectAccountType(opt.type);
+      } else if (state.step === 'amount') {
+        const idx = parseInt(e.key, 10) - 1;
+        const el = document.querySelectorAll('#amountMenu .screen-option')[idx];
+        if (el) el.click();
+      }
+    });
 
     render();
   </script>
