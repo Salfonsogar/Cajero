@@ -373,7 +373,6 @@ body {
     filter: brightness(1.15);
 }
 
-/* ---- Bandeja de billetes ---- */
 .slot {
     margin-top: 20px;
     background: linear-gradient(180deg, #0e0f10, #050505);
